@@ -88,7 +88,7 @@ fn bulk_read(stream: &mut TcpStream, size: usize) -> Result<Vec<u8>> {
 
 fn handle_client(stream: &mut TcpStream) -> Result<()> {
     let message = bulk_read(stream, 1000)?;
-    let Ok(message_str) = str::from_utf8(message.as_slice()) else {
+    let Ok(message_str) = str::from_utf8(message.as_slice().trim_ascii()) else {
         bulk_write(stream, str::as_bytes("Bad path\n"))?;
         return Ok(());
     };
@@ -102,9 +102,11 @@ fn handle_client(stream: &mut TcpStream) -> Result<()> {
             for dir_entry in ok_dir {
                 if let Ok(dir_entry) = dir_entry && let Some(dir_name) = dir_entry.file_name().to_str() {
                     to_send.push_str(dir_name);
+                    to_send.push('\n');
                 }
             }
             bulk_write(stream, to_send.as_bytes())?;
+            println!("{}", to_send);
         }
         Err(error) => {
             println!("{:?}", error);
