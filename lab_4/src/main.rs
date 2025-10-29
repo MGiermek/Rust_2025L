@@ -19,6 +19,7 @@ fn main() {
         if let Ok(mut stream) = stream && let Err(error) = handle_client(&mut stream) {
             println!("{:?}", error);
         }
+        
     }
 }
 
