@@ -1,2 +1,4 @@
-pub mod implementations;
+pub mod impls;
 pub mod db_structure;
+pub mod cmd_impls;
+pub mod commands;
