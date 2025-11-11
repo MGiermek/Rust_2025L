@@ -12,17 +12,32 @@ fn main() {
     let a: &str = "xyz";
     println!("{} is a string", a.parse::<String>().unwrap());
 
-    let context_db = AnyDatabase::IntDatabase(Database::<i64>::new());
+    let mut context_db = AnyDatabase::IntDatabase(Database::<i64>::new());
+    let mut executed_commands = Vec::<String>::new();
+    println!("Give me COMMMAAAAAANDS");
 
     loop {
         let mut input = String::new();
-        io::stdin().read_line(&mut input).expect("Failed to read line");
+        let Ok(_) = io::stdin().read_line(&mut input) else {
+            println!("Failed to read line");
+            continue;
+        };
 
-        let command = AnyCommand::parse_input(input.as_str(), &context_db);
-        match command {
-            Ok(cmd) => println!("Parsed command: {:?}", cmd),
-            Err(e) => println!("Error parsing command: {:?}", e),
+        match AnyCommand::create_and_execute(input.as_str(), &mut context_db, &mut executed_commands) {
+            Ok(_) => println!("Command executed successfully"),
+            Err(e) => println!("{}", e),
         }
+
+        // match AnyCommand::parse_input(input.as_str(), &mut context_db) {
+        //     Ok(cmd) => {
+        //         match cmd.execute(&mut executed_commands) {
+        //             Ok(_) => println!("Command executed successfully"),
+        //             Err(e) => println!("Error executing command: {}", e),
+        //         }
+        //     }
+        //     Err(e) => println!("Error parsing command: {}", e),
+        // }
+        // println!("{:?}", context_db);
         println!("-----------------------------------");
     }
 }

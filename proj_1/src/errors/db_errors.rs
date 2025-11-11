@@ -25,4 +25,22 @@ pub enum MyDatabaseError {
 
     #[error("Table with name '{0}' already exists in database")]
     TableAlreadyExists(String),
+
+    #[error("Keys do not match the table structure")]
+    KeysMismatch,
+
+    #[error("Record with the given key already exists")]
+    RecordAlreadyExists,
+
+    #[error("Specified key not found in table")]
+    KeyNotFound,
+
+    #[error("IO Error occurred: {0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("Error parsing command: {0}")]
+    CommandParseError(Box<MyDatabaseError>),
+
+    #[error("Error executing command: {0}")]
+    CommandExecuteError(Box<MyDatabaseError>),
 }

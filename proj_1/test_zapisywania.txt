@@ -1,0 +1,5 @@
+CREATE abc KEY k1 FIELDS k1: Int, k2: String, k3: Bool, k4: Float
+INSERT k1 = 1, k2 = "Kaszankaaa", k3 = true, k4 = 2.66 INTO abc
+INSERT k1 = 5, k2 = "Rybki i akwarium", k3 = false, k4 = 77.99 INTO abc
+SELECT * FROM abc
+SELECT k1, k2 FROM abc
