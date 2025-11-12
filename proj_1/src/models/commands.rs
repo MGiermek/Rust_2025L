@@ -1,5 +1,6 @@
 use crate::db_errors::MyDatabaseError;
 use crate::models::db_structure::*;
+use crate::models::where_parsing::WhereClause;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, Write, BufRead};
@@ -202,12 +203,12 @@ pub struct SelectCmd<'a> {
     original_string: String,
     table: AnyTableRef<'a>,
     values_to_select: Vec<String>,
-    condition: Option<String>,
+    condition: Option<WhereClause>,
 }
 
 impl<'b> Command<'b> for SelectCmd<'b> {
     fn execute(mut self, executed_commands: &mut Vec<String>) -> Result<(), MyDatabaseError> {
-        match self.table.select_and_display(self.values_to_select) {
+        match self.table.select_and_display(&self.values_to_select, &self.condition) {
             Ok(_) => {
                 executed_commands.push(self.original_string);
                 Ok(())
@@ -234,6 +235,14 @@ impl<'b> Command<'b> for SelectCmd<'b> {
                 values_to_select.push(field.trim().to_string());
             }
         }
+
+        let condition = if let Some(cond_str) = condition {
+            Some(WhereClause::create_from_string(cond_str, table.get_structure())?)
+        } else {
+            None
+        };
+
+        // println!("Where condition: {:?}", condition);
         
         Ok(SelectCmd {
             original_string: format!("SELECT {}", input),

@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use crate::db_errors::MyDatabaseError;
+use crate::models::where_parsing::WhereClause;
 pub trait DatabaseKey {
     fn equals(&self, other: &Self) -> bool;
     fn validate_value_type(s: &ValueType) -> bool;
@@ -7,12 +8,31 @@ pub trait DatabaseKey {
     fn get_from_string(s: String) -> Result<Self, MyDatabaseError> where Self: Sized;
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Value {
     Bool(bool),
     String(String),
     Int(i64),
     Float(f64),
+}
+impl Value {
+    pub fn is_bigger_than(&self, other: &Value) -> Result<bool, MyDatabaseError> {
+        match (self, other) {
+            (Value::Int(i1), Value::Int(i2)) => Ok(i1 > i2),
+            (Value::Float(f1), Value::Float(f2)) => Ok(f1 > f2),
+            (Value::Int(i1), Value::Float(f2)) => Ok((*i1 as f64) > *f2),
+            (Value::Float(f1), Value::Int(i2)) => Ok(*f1 > (*i2 as f64)),
+            (Value::String(s1), Value::String(s2)) => Ok(s1 > s2),
+            _ => Err(MyDatabaseError::CannotCompareValues),
+        }
+    }
+    pub fn is_equal_to(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::Int(i1), Value::Float(f2)) => (*i1 as f64) == *f2,
+            (Value::Float(f1), Value::Int(i2)) => *f1 == (*i2 as f64),
+            _ => self == other,
+        }
+    }
 }
 #[derive(Debug, PartialEq)]
 pub enum ValueType {
@@ -54,6 +74,11 @@ impl ValueType {
 pub struct Record {
     values: HashMap<String, Value>,   
 }
+impl Record {
+    pub fn get_value_for_column(&self, column_name: &str) -> Option<&Value> {
+        self.values.get(column_name)
+    }
+}
 
 #[derive(Debug)]
 pub struct Table<K: DatabaseKey + Ord> {
@@ -93,18 +118,24 @@ impl<K: DatabaseKey + Ord> Table<K> {
             None => Err(MyDatabaseError::KeyNotFound),
         }
     }
-    fn select_and_display(&mut self, values_to_select: Vec<String>) -> Result<(), MyDatabaseError> {
-        for value_name in &values_to_select {
+    fn select_and_display(&mut self, values_to_select: &Vec<String>, condition: &Option<WhereClause>) -> Result<(), MyDatabaseError> {
+        for value_name in values_to_select {
             if !self.structure.contains_key(value_name) {
                 return Err(MyDatabaseError::InvalidFieldName);
             }
         }
-        for value_name in &values_to_select {
+        for value_name in values_to_select {
             print!("{}\t", value_name);
         }
         println!();
         for record in self.records.values() {
-            for value_name in &values_to_select {
+            if let Some(cond) = condition {
+                let condition_met = cond.evaluate_for_record(record)?;
+                if !condition_met {
+                    continue;
+                }
+            }
+            for value_name in values_to_select {
                 let Some(value) = record.values.get(value_name) else {
                     return Err(MyDatabaseError::InvalidFieldName); // shouldn't happen due to earlier check
                 };
@@ -151,10 +182,16 @@ impl<'a> AnyTableRef<'a> {
             AnyTableRef::IntKeyTable(table) => table.delete_key(key_as_string),
         }
     }
-    pub fn select_and_display(&mut self, values_to_select: Vec<String>) -> Result<(), MyDatabaseError> {
+    pub fn select_and_display(&mut self, values_to_select: &Vec<String>, condition: &Option<WhereClause>) -> Result<(), MyDatabaseError> {
         match self {
-            AnyTableRef::StringKeyTable(table) => table.select_and_display(values_to_select),
-            AnyTableRef::IntKeyTable(table) => table.select_and_display(values_to_select),
+            AnyTableRef::StringKeyTable(table) => table.select_and_display(values_to_select, condition),
+            AnyTableRef::IntKeyTable(table) => table.select_and_display(values_to_select, condition),
+        }
+    }
+    pub fn get_structure(&self) -> &HashMap<String, ValueType> {
+        match self {
+            AnyTableRef::StringKeyTable(table) => &table.structure,
+            AnyTableRef::IntKeyTable(table) => &table.structure,
         }
     }
 }

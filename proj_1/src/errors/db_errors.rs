@@ -43,4 +43,22 @@ pub enum MyDatabaseError {
 
     #[error("Error executing command: {0}")]
     CommandExecuteError(Box<MyDatabaseError>),
+
+    #[error("Error parsing where clause: {0}")]
+    InvalidWhereClauseFormat(String),
+
+    #[error("Wrongly parsed clause: {0}")]
+    WronglyParsedClause(String),
+
+    #[error("Cannot determine which value is bigger for bools or strings with numbers")]
+    CannotCompareValues,
+
+    #[error("Cannot perform AND/OR operation on non-boolean values")]
+    InvalidLogicalOperation,
+
+    #[error("Cannot perform mathematical operation on non-numeric values")]
+    InvalidMathOperation,
+
+    #[error("Cannot divide by zero")]
+    DivisionByZero,
 }
