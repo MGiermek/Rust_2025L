@@ -1,5 +1,6 @@
 use crate::db_errors::MyDatabaseError;
 use crate::models::db_structure::*;
+use crate::models::utilities::{split_once_skipping_outside_quotes, split_preserving_quote_insides};
 use crate::models::where_parsing::WhereClause;
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -77,7 +78,7 @@ impl<'b> Command<'b> for AnyCommand<'b> {
 }
 
 #[derive(Debug)]
-struct CreateTableCmd<'a> {
+pub struct CreateTableCmd<'a> {
     original_string: String,
     db: &'a mut AnyDatabase,
     name: String,
@@ -128,7 +129,7 @@ impl<'b> Command<'b> for CreateTableCmd<'b> {
 }
 
 #[derive(Debug)]
-struct InsertRecordCmd<'a> {
+pub struct InsertRecordCmd<'a> {
     original_string: String,
     table: AnyTableRef<'a>,
     values: HashMap<String, Value>
@@ -149,8 +150,8 @@ impl<'b> Command<'b> for InsertRecordCmd<'b> {
         };
         let table = context_db.get_table_by_name(table_name.trim())?;
         let mut values_map: HashMap<String, Value> = HashMap::new();
-        for value_pair in values.trim().split(",") {
-            let Some((field_name, value_str)) = value_pair.trim().split_once("=") else {
+        for value_pair in split_preserving_quote_insides(values, ',') {
+            let Some((field_name, value_str)) = split_once_skipping_outside_quotes(value_pair, '=') else {
                 return Err(MyDatabaseError::InvalidCommandFormat("INSERT"));
             };
             let Some(field_type) = table.get_type_for_name(field_name.trim()) else {
@@ -231,7 +232,7 @@ impl<'b> Command<'b> for SelectCmd<'b> {
             values_to_select = table.get_all_columns();
         }
         else {
-            for field in fields.trim().split(",") {
+            for field in split_preserving_quote_insides(fields, ',') {
                 values_to_select.push(field.trim().to_string());
             }
         }
@@ -254,7 +255,7 @@ impl<'b> Command<'b> for SelectCmd<'b> {
 }
 
 #[derive(Debug)]
-struct SaveAsCmd {
+pub struct SaveAsCmd {
     filename: String,
 }
 impl<'b> Command<'b> for SaveAsCmd {
@@ -285,7 +286,7 @@ impl<'b> Command<'b> for SaveAsCmd {
 }
 
 #[derive(Debug)]
-struct ReadFromCmd<'a> {
+pub struct ReadFromCmd<'a> {
     db: &'a mut AnyDatabase,
     filename: String,
 }

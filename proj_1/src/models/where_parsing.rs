@@ -1,4 +1,4 @@
-use crate::db_errors::MyDatabaseError;
+use crate::{db_errors::MyDatabaseError, models::utilities::split_preserving_quote_insides};
 use std::collections::HashMap;
 use crate::models::db_structure::{ValueType, Record, Value};
 
@@ -188,9 +188,9 @@ impl WhereClause {
         for op in operators {
             clause = clause.replace(op, &format!(" {} ", op));
         }
-        let tokens: Vec<&str> = clause.split_whitespace().collect();
+        
         let mut elements: Vec<ClauseElement> = Vec::new();
-        for token in tokens {
+        for token in split_preserving_quote_insides(&clause, ' ') {
             match token {
                 "(" => elements.push(ClauseElement::OpeningBracket),
                 ")" => elements.push(ClauseElement::ClosingBracket),
@@ -211,6 +211,13 @@ impl WhereClause {
                         elements.push(ClauseElement::ColumnIdentifier(token.to_string()));
                     } else if let Ok(constant) = token.parse::<f64>() {
                         elements.push(ClauseElement::Constant(Value::Float(constant)));
+                    } else if token.eq_ignore_ascii_case("true") {
+                        elements.push(ClauseElement::Constant(Value::Bool(true)));
+                    } else if token.eq_ignore_ascii_case("false") {
+                        elements.push(ClauseElement::Constant(Value::Bool(false)));
+                    } else if token.starts_with("\"") && token.ends_with("\"") && token.len() >= 2 {
+                        let str_content = &token[1..token.len()-1];
+                        elements.push(ClauseElement::Constant(Value::String(str_content.to_string())));
                     } else {
                         return Err(MyDatabaseError::InvalidWhereClauseFormat(format!("Unknown token in WHERE clause: {}", token)));
                     }
@@ -257,7 +264,10 @@ impl WhereClause {
                 }
             }
         }
-        for operator in help_stack {
+        while let Some(operator) = help_stack.pop() {
+            if operator == ClauseElement::OpeningBracket {
+                return Err(MyDatabaseError::InvalidWhereClauseFormat("Closing bracket missing".to_string()));
+            }
             onp_elements.push(operator);
         }
         Ok(WhereClause { onp_elements })
