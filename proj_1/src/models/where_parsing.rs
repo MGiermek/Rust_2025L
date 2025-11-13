@@ -1,4 +1,4 @@
-use crate::{db_errors::MyDatabaseError, models::utilities::split_preserving_quote_insides};
+use crate::{db_errors::MyDatabaseError, models::utilities::split_by_operators_preserving_quotes};
 use std::collections::HashMap;
 use crate::models::db_structure::{ValueType, Record, Value};
 
@@ -183,14 +183,11 @@ pub struct WhereClause {
     onp_elements: Vec<ClauseElement>
 }
 impl WhereClause {
-    pub fn create_from_string(mut clause: String, columns: &HashMap<String, ValueType>) -> Result<WhereClause, MyDatabaseError> {
-        let operators = vec!["=", "!=", ">", "<", ">=", "<=", "AND", "OR", "+", "-", "*", "/", "(", ")"];
-        for op in operators {
-            clause = clause.replace(op, &format!(" {} ", op));
-        }
+    pub fn create_from_string(clause: String, columns: &HashMap<String, ValueType>) -> Result<WhereClause, MyDatabaseError> {
+        let operators = ["!=", ">=", "<=", ">", "<", "=", "AND", "OR", "+", "-", "*", "/", "(", ")"];
         
         let mut elements: Vec<ClauseElement> = Vec::new();
-        for token in split_preserving_quote_insides(&clause, ' ') {
+        for token in split_by_operators_preserving_quotes(&clause, &operators) {
             match token {
                 "(" => elements.push(ClauseElement::OpeningBracket),
                 ")" => elements.push(ClauseElement::ClosingBracket),

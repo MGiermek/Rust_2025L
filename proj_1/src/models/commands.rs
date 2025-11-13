@@ -7,7 +7,7 @@ use std::fs::{self, File};
 use std::io::{self, Write, BufRead};
 use std::path::Path;
 pub trait Command<'b> {
-    fn execute(self, executed_commands: &mut Vec<String>) -> Result<(), MyDatabaseError>;
+    fn execute(self, executed_commands: &mut Vec<String>, response_buf: &mut String) -> Result<(), MyDatabaseError>;
     fn parse_input<'a>(input: &'a str, context_db: &'b mut AnyDatabase) -> Result<Self, MyDatabaseError> where Self: Sized;
 }
 #[derive(Debug)]
@@ -20,10 +20,10 @@ pub enum AnyCommand<'b> {
     ReadFrom(ReadFromCmd<'b>),
 }
 impl<'b> AnyCommand<'b> {
-    pub fn create_and_execute(input: &str, context_db: &'b mut AnyDatabase, executed_commands: &mut Vec<String>) -> Result<(), MyDatabaseError> {
+    pub fn create_and_execute(input: &str, context_db: &'b mut AnyDatabase, executed_commands: &mut Vec<String>, response_buf: &mut String) -> Result<(), MyDatabaseError> {
         match AnyCommand::parse_input(input, context_db) {
             Ok(cmd) => {
-                if let Err(e) = cmd.execute(executed_commands) {
+                if let Err(e) = cmd.execute(executed_commands, response_buf) {
                     return Err(MyDatabaseError::CommandExecuteError(Box::new(e)));
                 }
             }
@@ -33,14 +33,14 @@ impl<'b> AnyCommand<'b> {
     }
 }
 impl<'b> Command<'b> for AnyCommand<'b> {
-    fn execute(self, executed_commands: &mut Vec<String>) -> Result<(), MyDatabaseError> {
+    fn execute(self, executed_commands: &mut Vec<String>, response_buf: &mut String) -> Result<(), MyDatabaseError> {
         match self {
-            AnyCommand::CreateTable(cmd) => cmd.execute(executed_commands),
-            AnyCommand::InsertRecord(cmd) => cmd.execute(executed_commands),
-            AnyCommand::DeleteRecord(cmd) => cmd.execute(executed_commands),
-            AnyCommand::Select(cmd) => cmd.execute(executed_commands),
-            AnyCommand::SaveAs(cmd) => cmd.execute(executed_commands),
-            AnyCommand::ReadFrom(cmd) => cmd.execute(executed_commands),
+            AnyCommand::CreateTable(cmd) => cmd.execute(executed_commands, response_buf),
+            AnyCommand::InsertRecord(cmd) => cmd.execute(executed_commands, response_buf),
+            AnyCommand::DeleteRecord(cmd) => cmd.execute(executed_commands, response_buf),
+            AnyCommand::Select(cmd) => cmd.execute(executed_commands, response_buf),
+            AnyCommand::SaveAs(cmd) => cmd.execute(executed_commands, response_buf),
+            AnyCommand::ReadFrom(cmd) => cmd.execute(executed_commands, response_buf),
         }
     }
     fn parse_input<'a>(input: &'a str, context_db: &'b mut AnyDatabase) -> Result<Self, MyDatabaseError> where Self: Sized {
@@ -86,7 +86,7 @@ pub struct CreateTableCmd<'a> {
     fields: HashMap<String, ValueType>
 }
 impl<'b> Command<'b> for CreateTableCmd<'b> {
-    fn execute(self, executed_commands: &mut Vec<String>) -> Result<(), MyDatabaseError> {
+    fn execute(self, executed_commands: &mut Vec<String>, _response_buf: &mut String) -> Result<(), MyDatabaseError> {
         match self.db.create_table(&self.name, &self.key_name, self.fields) {
             Ok(_) => {
                 executed_commands.push(self.original_string);
@@ -135,7 +135,7 @@ pub struct InsertRecordCmd<'a> {
     values: HashMap<String, Value>
 }
 impl<'b> Command<'b> for InsertRecordCmd<'b> {
-    fn execute(mut self, executed_commands: &mut Vec<String>) -> Result<(), MyDatabaseError> {
+    fn execute(mut self, executed_commands: &mut Vec<String>, _response_buf: &mut String) -> Result<(), MyDatabaseError> {
         match self.table.insert_values(self.values) {
             Ok(_) => {
                 executed_commands.push(self.original_string);
@@ -177,7 +177,7 @@ pub struct DeleteRecordCmd<'a> {
     key_as_string: String,
 }
 impl<'b> Command<'b> for DeleteRecordCmd<'b> {
-    fn execute(mut self, executed_commands: &mut Vec<String>) -> Result<(), MyDatabaseError> {
+    fn execute(mut self, executed_commands: &mut Vec<String>, _response_buf: &mut String) -> Result<(), MyDatabaseError> {
         match self.table.delete_key(self.key_as_string) {
             Ok(_) => {
                 executed_commands.push(self.original_string);
@@ -187,14 +187,18 @@ impl<'b> Command<'b> for DeleteRecordCmd<'b> {
         }
     }
     fn parse_input(input: &str, context_db: &'b mut AnyDatabase) -> Result<Self, MyDatabaseError> where Self: Sized {
-        let Some((key_str, table_name)) = input.split_once("FROM") else {
+        let Some((mut key_str, table_name)) = input.split_once("FROM") else {
             return Err(MyDatabaseError::InvalidCommandFormat("DELETE"));
         };
         let table = context_db.get_table_by_name(table_name.trim())?;
+        key_str = key_str.trim();
+        if key_str.starts_with('"') && key_str.ends_with('"') {
+            key_str = &key_str[1..key_str.len()-1];
+        }
         Ok(DeleteRecordCmd {
             original_string: format!("DELETE {}", input),
             table,
-            key_as_string: key_str.trim().to_string(),
+            key_as_string: key_str.to_string(),
         })
     }
 }
@@ -208,8 +212,8 @@ pub struct SelectCmd<'a> {
 }
 
 impl<'b> Command<'b> for SelectCmd<'b> {
-    fn execute(mut self, executed_commands: &mut Vec<String>) -> Result<(), MyDatabaseError> {
-        match self.table.select_and_display(&self.values_to_select, &self.condition) {
+    fn execute(mut self, executed_commands: &mut Vec<String>, response_buf: &mut String) -> Result<(), MyDatabaseError> {
+        match self.table.select_and_display(&self.values_to_select, &self.condition, response_buf) {
             Ok(_) => {
                 executed_commands.push(self.original_string);
                 Ok(())
@@ -243,7 +247,7 @@ impl<'b> Command<'b> for SelectCmd<'b> {
             None
         };
 
-        // println!("Where condition: {:?}", condition);
+        println!("Where condition: {:?}", condition);
         
         Ok(SelectCmd {
             original_string: format!("SELECT {}", input),
@@ -259,7 +263,7 @@ pub struct SaveAsCmd {
     filename: String,
 }
 impl<'b> Command<'b> for SaveAsCmd {
-    fn execute(self, executed_commands: &mut Vec<String>) -> Result<(), MyDatabaseError> {
+    fn execute(self, executed_commands: &mut Vec<String>, response_buf: &mut String) -> Result<(), MyDatabaseError> {
         let path = Path::new(&self.filename);
         if let Some(parent) = path.parent() {
             if let Err(e) = fs::create_dir_all(parent) {
@@ -275,7 +279,8 @@ impl<'b> Command<'b> for SaveAsCmd {
                 return Err(MyDatabaseError::IoError(e));
             }
         }
-        println!("Commands saved to {}", self.filename);
+        // println!("Commands saved to {}", self.filename);
+        response_buf.push_str(&format!("Commands saved to {}\n", self.filename));
         Ok(())
     }
     fn parse_input(input: &str, _context_db: &'b mut AnyDatabase) -> Result<Self, MyDatabaseError> where Self: Sized {
@@ -291,19 +296,24 @@ pub struct ReadFromCmd<'a> {
     filename: String,
 }
 impl<'b> Command<'b> for ReadFromCmd<'b> {
-    fn execute(self, executed_commands: &mut Vec<String>) -> Result<(), MyDatabaseError> {
+    fn execute(self, executed_commands: &mut Vec<String>, response_buf: &mut String) -> Result<(), MyDatabaseError> {
         let path = Path::new(&self.filename);
         let file = match File::open(path) {
             Ok(f) => f,
             Err(e) => return Err(MyDatabaseError::IoError(e)),
         };
         let reader = io::BufReader::new(file);
-        println!("Reading and executing commands below:\n");
+        response_buf.push_str("Reading and executing commands below:\n");
+        // println!("Reading and executing commands below:\n");
         for line_result in reader.lines() {
             match line_result {
                 Ok(l) => {
-                    println!("{}", l);
-                    AnyCommand::create_and_execute(l.as_str(), self.db, executed_commands)?;
+                    if l.trim().is_empty() {
+                        continue;
+                    }
+                    response_buf.push_str(l.as_str());
+                    response_buf.push('\n');
+                    AnyCommand::create_and_execute(l.as_str(), self.db, executed_commands, response_buf)?;
                 }
                 Err(e) => return Err(MyDatabaseError::IoError(e)),
             };

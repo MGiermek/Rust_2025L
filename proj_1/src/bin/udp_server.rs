@@ -1,12 +1,12 @@
-use std::io;
+use std::net::UdpSocket;
 use clap::{ArgGroup, Parser};
-use proj_1::models::{commands::AnyCommand, db_structure::*};
+use proj_1::models::{commands::AnyCommand, db_structure::{AnyDatabase, Database}};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None,
 group(
         ArgGroup::new("mode")
-            .required(true)
+            .required(true)    // must have one of them
             .args(["int", "string"]),
     ))]
 struct Args {
@@ -31,31 +31,31 @@ fn main() {
         return;
     }
 
-    let operators = ["AND", "OR", "!=", ">=", "<=", ">", "<", "=", "+", "-", "*", "/", "(", ")"];
-    let check_str = "k4 <= 2.66 AND k3 = true OR k2 != \"some text with + and - inside\" AND k1 = 123";
-    println!("Splitted: {:?}", proj_1::models::utilities::split_by_operators_preserving_quotes(check_str, &operators));
-
-    // let mut context_db = AnyDatabase::IntDatabase(Database::<i64>::new());
+    let Ok(socket) = UdpSocket::bind("0.0.0.0:8888") else {
+        println!("Failed to bind to socket");
+        return;
+    };
+    println!("Server listening on 0.0.0.0:8888");
     let mut executed_commands = Vec::<String>::new();
-    println!("Give me COMMMAAAAAANDS");
 
+    let mut buf = [0u8; 1024];
     loop {
-        let mut input = String::new();
-        let Ok(_) = io::stdin().read_line(&mut input) else {
-            println!("Failed to read line");
+        let Ok((len, src)) = socket.recv_from(&mut buf) else {
+            println!("Failed to receive data");
             continue;
         };
-        if input.trim().is_empty() {
-            continue;
-        }
+        let msg = String::from_utf8_lossy(&buf[..len]);
 
         let mut response_buf = String::new();
 
-        match AnyCommand::create_and_execute(input.as_str(), &mut context_db, &mut executed_commands, &mut response_buf) {
-            Ok(_) => response_buf.push_str("Command executed successfully\n"),
+        match AnyCommand::create_and_execute(msg.as_ref(), &mut context_db, &mut executed_commands, &mut response_buf) {
+            Ok(_) => response_buf.push_str("Command executed successfully\n\n"),
             Err(e) => response_buf.push_str(&format!("{}\n", e)),
         }
-        println!("{}", response_buf);
-        println!("-----------------------------------");
+
+        let Ok(_) = socket.send_to(response_buf.as_bytes(), src) else {
+            println!("Failed to send response to {}", src);
+            continue;
+        };
     }
 }

@@ -118,16 +118,19 @@ impl<K: DatabaseKey + Ord> Table<K> {
             None => Err(MyDatabaseError::KeyNotFound),
         }
     }
-    fn select_and_display(&mut self, values_to_select: &Vec<String>, condition: &Option<WhereClause>) -> Result<(), MyDatabaseError> {
+    fn select_and_display(&mut self, values_to_select: &Vec<String>, condition: &Option<WhereClause>, response_buf: &mut String) -> Result<(), MyDatabaseError> {
         for value_name in values_to_select {
             if !self.structure.contains_key(value_name) {
                 return Err(MyDatabaseError::InvalidFieldName);
             }
         }
+
         for value_name in values_to_select {
-            print!("{}\t", value_name);
+            response_buf.push_str(&format!("{}\t", value_name));
+            // print!("{}\t", value_name);
         }
-        println!();
+        // println!();
+        response_buf.push('\n');
         for record in self.records.values() {
             if let Some(cond) = condition {
                 let condition_met = cond.evaluate_for_record(record)?;
@@ -140,13 +143,13 @@ impl<K: DatabaseKey + Ord> Table<K> {
                     return Err(MyDatabaseError::InvalidFieldName); // shouldn't happen due to earlier check
                 };
                 match value {
-                    Value::Bool(b) => print!("{}\t", b),
-                    Value::Int(i) => print!("{}\t", i),
-                    Value::Float(f) => print!("{}\t", f),
-                    Value::String(s) => print!("{}\t", s),
+                    Value::Bool(b) => response_buf.push_str(&format!("{}\t", b)),
+                    Value::Int(i) => response_buf.push_str(&format!("{}\t", i)),
+                    Value::Float(f) => response_buf.push_str(&format!("{}\t", f)),
+                    Value::String(s) => response_buf.push_str(&format!("{}\t", s)),
                 }
             }
-            println!();
+            response_buf.push('\n');
         }
         Ok(())
     }
@@ -182,10 +185,10 @@ impl<'a> AnyTableRef<'a> {
             AnyTableRef::IntKeyTable(table) => table.delete_key(key_as_string),
         }
     }
-    pub fn select_and_display(&mut self, values_to_select: &Vec<String>, condition: &Option<WhereClause>) -> Result<(), MyDatabaseError> {
+    pub fn select_and_display(&mut self, values_to_select: &Vec<String>, condition: &Option<WhereClause>, response_buf: &mut String) -> Result<(), MyDatabaseError> {
         match self {
-            AnyTableRef::StringKeyTable(table) => table.select_and_display(values_to_select, condition),
-            AnyTableRef::IntKeyTable(table) => table.select_and_display(values_to_select, condition),
+            AnyTableRef::StringKeyTable(table) => table.select_and_display(values_to_select, condition, response_buf),
+            AnyTableRef::IntKeyTable(table) => table.select_and_display(values_to_select, condition, response_buf),
         }
     }
     pub fn get_structure(&self) -> &HashMap<String, ValueType> {
