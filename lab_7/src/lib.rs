@@ -69,10 +69,7 @@ pub fn cycles_2_loop(edges: &[(u32, u32)]) -> Vec<u32> {
 
 pub fn cycles_2(edges: &[(u32, u32)]) -> Vec<u32> {
     edges.iter().cartesian_product(edges.iter()).filter_map(|prod| {
-        if prod.0.0 == prod.1.1 && prod.0.1 == prod.1.0 && prod.0.0 != prod.0.1 {
-            return Some([prod.0.0, prod.0.1]);
-        }
-        None
+        (prod.0.0 == prod.1.1 && prod.0.1 == prod.1.0 && prod.0.0 != prod.0.1).then_some([prod.0.0, prod.0.1])
     }).flatten().unique().sorted().collect::<Vec<u32>>()
 }
 
